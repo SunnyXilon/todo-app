@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo List</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        danger: '#EF4444',
+                        neon: '#00f2ff',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .neon-border {
+            box-shadow: 0 0 10px #00f2ff,
+                       0 0 20px #00f2ff,
+                       0 0 30px #00f2ff;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-white mb-8 text-center">Todo List</h1>
+        
+        <div class="bg-gray-800 rounded-lg shadow-md p-6 mb-8">
+            <div class="flex flex-col md:flex-row gap-4">
+                <input type="text" 
+                    class="todo-input flex-1 px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-neon focus:border-transparent" 
+                    placeholder="Add a new todo">
+                <select class="status-select px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-neon focus:border-transparent">
+                    <option value="present">Present</option>
+                    <option value="past">Past</option>
+                    <option value="future">Future</option>
+                </select>
+                <button class="todo-button px-6 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors duration-200">
+                    Add Todo
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="column bg-gray-800 rounded-lg p-6 neon-border">
+                <h2 class="text-xl font-semibold text-white mb-4 text-center">Past</h2>
+                <ul class="todo-list min-h-[200px] space-y-3" data-status="past"></ul>
+            </div>
+            <div class="column bg-gray-800 rounded-lg p-6 neon-border">
+                <h2 class="text-xl font-semibold text-white mb-4 text-center">Present</h2>
+                <ul class="todo-list min-h-[200px] space-y-3" data-status="present"></ul>
+            </div>
+            <div class="column bg-gray-800 rounded-lg p-6 neon-border">
+                <h2 class="text-xl font-semibold text-white mb-4 text-center">Future</h2>
+                <ul class="todo-list min-h-[200px] space-y-3" data-status="future"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const todoInput = document.querySelector('.todo-input');
+        const statusSelect = document.querySelector('.status-select');
+        const addButton = document.querySelector('.todo-button');
+        const todoLists = document.querySelectorAll('.todo-list');
+        const columns = document.querySelectorAll('.column');
+
+        // Fetch todos from the server
+        async function fetchTodos() {
+            try {
+                const response = await fetch('/api/todos');
+                const todos = await response.json();
+                renderTodos(todos);
+            } catch (err) {
+                console.error('Error fetching todos:', err);
+            }
+        }
+
+        // Render todos in the appropriate columns
+        function renderTodos(todos) {
+            todoLists.forEach(list => {
+                list.innerHTML = '';
+            });
+
+            todos.forEach(todo => {
+                const li = document.createElement('li');
+                li.className = 'todo-item bg-gray-700 p-4 rounded-lg shadow-sm border border-gray-600 flex items-center justify-between cursor-move hover:shadow-md transition-shadow duration-200';
+                li.draggable = true;
+                li.dataset.id = todo.id;
+                li.innerHTML = `
+                    <span class="flex-1 text-white">${todo.title}</span>
+                    <button class="delete-button ml-4 px-3 py-1 bg-danger text-white rounded hover:bg-red-600 transition-colors duration-200">
+                        Delete
+                    </button>
+                `;
+
+                const targetList = document.querySelector(`.todo-list[data-status="${todo.status}"]`);
+                targetList.appendChild(li);
+
+                li.addEventListener('dragstart', handleDragStart);
+                li.addEventListener('dragend', handleDragEnd);
+
+                li.addEventListener('click', (e) => {
+                    if (e.target.tagName === 'SPAN') {
+                        li.classList.toggle('line-through', 'text-gray-400');
+                    }
+                });
+
+                li.querySelector('.delete-button').addEventListener('click', async () => {
+                    try {
+                        const formData = new FormData();
+                        formData.append('intent', 'delete');
+                        formData.append('id', todo.id);
+
+                        await fetch('/api/todos', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        li.remove();
+                    } catch (err) {
+                        console.error('Error deleting todo:', err);
+                    }
+                });
+            });
+        }
+
+        // Drag and drop functionality
+        let draggedItem = null;
+
+        function handleDragStart(e) {
+            draggedItem = this;
+            this.classList.add('opacity-50', 'bg-gray-700');
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('opacity-50', 'bg-gray-700');
+            columns.forEach(column => column.classList.remove('bg-gray-700'));
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            this.classList.add('bg-gray-700');
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('bg-gray-700');
+        }
+
+        async function handleDrop(e) {
+            e.preventDefault();
+            this.classList.remove('bg-gray-700');
+            
+            if (draggedItem) {
+                const targetList = this.querySelector('.todo-list');
+                const newStatus = targetList.dataset.status;
+                const todoId = draggedItem.dataset.id;
+
+                try {
+                    const formData = new FormData();
+                    formData.append('intent', 'update');
+                    formData.append('id', todoId);
+                    formData.append('status', newStatus);
+
+                    await fetch('/api/todos', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    targetList.appendChild(draggedItem);
+                } catch (err) {
+                    console.error('Error updating todo:', err);
+                }
+            }
+        }
+
+        // Add drag and drop event listeners to columns
+        columns.forEach(column => {
+            column.addEventListener('dragover', handleDragOver);
+            column.addEventListener('dragleave', handleDragLeave);
+            column.addEventListener('drop', handleDrop);
+        });
+
+        // Add new todo
+        addButton.addEventListener('click', async () => {
+            const todoText = todoInput.value.trim();
+            const status = statusSelect.value;
+            if (todoText) {
+                try {
+                    const formData = new FormData();
+                    formData.append('intent', 'create');
+                    formData.append('title', todoText);
+                    formData.append('status', status);
+
+                    const response = await fetch('/api/todos', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        todoInput.value = '';
+                        fetchTodos(); // Refresh the list
+                    }
+                } catch (err) {
+                    console.error('Error adding todo:', err);
+                }
+            }
+        });
+
+        todoInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addButton.click();
+            }
+        });
+
+        // Fetch todos on page load
+        fetchTodos();
+    </script>
+</body>
+</html>
