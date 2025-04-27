@@ -9,6 +9,7 @@ declare module "@remix-run/node" {
 }
 
 export default defineConfig({
+  base: "/todo-app/",
   plugins: [
     remix({
       future: {
